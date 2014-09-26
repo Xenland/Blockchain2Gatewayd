@@ -8,9 +8,6 @@ blockchain_api::blockchain_api(QObject *parent) :
     block_hash = QStringList();
     block_tx_id = QStringList();
     raw_txid_representation = QStringList();
-
-    //init tx_list as an array
-    tx_list = QJsonArray();
 }
 
 bool blockchain_api::can_connect(){
@@ -38,87 +35,82 @@ void blockchain_api::blockchain_clear_for_new_request(){
 }
 
 void blockchain_api::scroll_and_detect_deposits(QStringList addresses){
-    while(1==1){
-        bool continue_process = false;
-        int block_height = 0;
-        while(continue_process == false){ //guarantee we have retrieved the block height
-            bool response_success_block_height = false;
-            block_height = get_highest_block_height(response_success_block_height);
+    bool continue_process = false;
+    int block_height = 0;
+    while(continue_process == false){ //guarantee we have retrieved the block height
+        bool response_success_block_height = false;
+        block_height = get_highest_block_height(response_success_block_height);
 
-            if(response_success_block_height == true){
-                //We have successfully conneected to the block chain and got the first piece of information we needed, continue with process
-                continue_process = true;
-            }
+        if(response_success_block_height == true){
+            //We have successfully conneected to the block chain and got the first piece of information we needed, continue with process
+            continue_process = true;
         }
+    }
 
-        qDebug() << "retrieved the highest block height";
+    //TEMPCODE block_height limit
+    block_height = 10000;
+
+    qDebug() << "downloading block hashes...";
+    //pre-download hashes
+    //int a = 0;
+    int a = 0;
+    while(a < block_height){
         bool response_success_hashindex = false;
-        QByteArray hash = get_hash_by_index(0, response_success_hashindex);
+        QByteArray hash = get_hash_by_index(a, response_success_hashindex);
 
-        qDebug() << "retrieved all known block hashes";
+        if(response_success_hashindex == true){
+            //record response to the list by the correct index
+            block_hash.append(QString::fromUtf8(hash));
 
-        //get all the txs from the gensis block till the known block height
-        bool response_success = false;
-        QByteArray json_tx_since_block = get_listsinceblock(hash, response_success);
-
-        if(response_success == true){
-            //scroll through tx list and catch all new balances
-            //convert to jsondocument
-            QJsonParseError * json_tx_list_error = new QJsonParseError();
-            QJsonDocument json_tx_list = QJsonDocument::fromJson(json_tx_since_block, json_tx_list_error);
-
-            //make sure conversion was a success
-            if(json_tx_list_error->error == QJsonParseError::NoError){
-                //success
-                QJsonObject json_tx_list_obj = json_tx_list.object();
-
-                //get the "result" object
-                QJsonObject result = json_tx_list_obj.value(QString("result")).toObject();
-
-                //get the "transactions" array
-                QJsonArray transactions = result.value(QString("transactions")).toArray();
-
-                //get size of transactions array
-                int transactions_size = transactions.size();
-                if(transactions_size > 0){
-                    for(int a = 0; a < transactions_size; ++a){
-                        QJsonObject tx_object = transactions.at(a).toObject();
-
-                        /** Check if the tx (tx_object) has already been deposited **/
-                        bool already_deposited = false;
-                        for(int b = 0; b < tx_list.size(); ++b){
-                            //check if this tx matches the one we are looking at from the incoming tx list
-                            if(tx_list.at(b).toObject().value(QString("txid")) == tx_object.value(QString("txid")).toString()){
-                                already_deposited = true;
-
-                                //break loop
-                                b = tx_list.size();
-                            }
-                        }
-                        qDebug() << "already deposited";
-                        if(already_deposited == false){
-                            /*The tx has not been deposited send a deposit signal to gatewayd and record the tx to the memory*/
-                            //Generate an object to add to the tx_list json document
-                            QJsonObject new_tx_object = QJsonObject();
-
-                            //add the txid
-                            new_tx_object.insert(QString("txid"), tx_object.value(QString("txid")));
-                            new_tx_object.insert(QString("address"), tx_object.value(QString("address")));
-
-                            //add the new tx object to the tx list
-                            tx_list.append(new_tx_object);
-                        }
-                    }
-                }else{
-                    qDebug() << "Nothing in the transactions list to parse";
-                }
-            }else{
-                qDebug() << "json parse error";
-            }
+            //indicate next loop we want the next block index/height
+            a = a + 1;
         }else{
-
+            //qDebug() << "HTTP response not 200/ok, retrying request...";
         }
-        qDebug() << "retrieved all txs from the genesis block to the height of:" << block_height;
+    }
+
+    qDebug() << "downloading tx ids per blockhash from the list downloaded already...";
+    //pre-download tx ids per block hash in the blockchain
+    int b = 0;
+    while(b < block_hash.size()){
+        bool response_success = false;
+        QByteArray tx_id = get_txid_by_blockhash(block_hash.at(b), response_success);
+        if(response_success == true){
+            //record response to the list by the correct index
+            block_tx_id.append(tx_id);
+
+            //indicate next loop we want the next block tx information
+            b = b + 1;
+        }else{
+            //qDebug() << "HTTP RESPONSE not 200/ok";
+        }
+    }
+
+    qDebug() << "downloading raw txid information per txid from the list downloaded already...";
+    //download raw_txid
+    int c = 0;
+    while(c < block_tx_id.size()){
+        bool response_success = false;
+        QByteArray raw_tx_representation = get_rawtxinfo_by_txid(block_tx_id.at(c), response_success);
+        if(response_success == true){
+            //record response to the list by the correct index
+            raw_txid_representation.append(raw_tx_representation);
+
+            //indicate next loop we want the next raw tx information
+            c = c + 1;
+        }else{
+            //qDebug() << "(raw_txid_representation)HTTP RESPONSE";
+        }
+    }
+
+    qDebug() << "download block/tx information from the raw txid, detect if any new balances are from addresses we are scanning for";
+    int d = 0;
+    while(d < raw_txid_representation.size()){
+        bool response_success = false;
+        get_tx_list_info(raw_txid_representation.at(d), response_success);
+
+        //indicate next loop we watn the next raw tx information
+        d = d + 1;
     }
 }
 
@@ -199,96 +191,6 @@ int blockchain_api::get_highest_block_height(bool& http_response_successful){
         }
     }else{
         qDebug() << "can't connect to blockchain";
-    }
-
-    return output;
-}
-
-QByteArray blockchain_api::get_listsinceblock(QString hash, bool& http_response_successful){
-    qDebug() << "geting tx";
-    //local vars
-    QByteArray output = QByteArray();
-    http_response_successful = false;
-
-    //Get first block hash
-    QByteArray http_request = QByteArray();
-    QByteArray http_head = generate_http_head();
-    QByteArray http_body = QByteArray();
-
-    QJsonObject request_jsonobj = QJsonObject();
-    request_jsonobj.insert(QString("jsonrpc"), QJsonValue(QString("2.0")));
-    request_jsonobj.insert(QString("id"), QJsonValue(QString("1")));
-    request_jsonobj.insert(QString("method"), QJsonValue(QString("listsinceblock")));
-
-    QJsonArray request_jsonarray = QJsonArray();
-    request_jsonarray.insert(0, QJsonValue(hash));
-
-    request_jsonobj.insert(QString("params"), QJsonValue(request_jsonarray));
-
-    QJsonDocument request_jsondoc = QJsonDocument(request_jsonobj);
-    http_body.append(request_jsondoc.toJson(QJsonDocument::Compact));
-
-    QString http_head_modified = QString::fromUtf8(http_head);
-    http_head_modified = http_head_modified.arg(http_body.length());
-    http_head = http_head_modified.toUtf8();
-
-    //Combine head + body
-    http_request.append(http_head);
-    http_request.append(http_body);
-
-    //write to blockchain network for the highest block count
-    blockchain_clear_for_new_request();
-    if(can_connect()){
-        tcp_socket->write(http_request);
-
-        //wait for response from blockchain
-        if(tcp_socket->waitForReadyRead()){
-            QByteArray blockchain_response = tcp_socket->readAll();
-            QString blockchain_response_string = QString::fromUtf8(blockchain_response);
-            QStringList blockchain_response_stringlist = blockchain_response_string.split(QString("\r\n\r\n"));
-            QString http_body = QString();
-
-            //Check if the response what 200/Ok
-            if(blockchain_response_stringlist.size() > 0){
-                //HTTP head
-                QString http_head = QString();
-                http_head = blockchain_response_stringlist.at(0);
-
-                //Split head so we can see what the response was
-                QStringList head_split_list = http_head.split(QString("\r\n"));
-
-                if(head_split_list.size() >= 0){
-                    QString response_line = head_split_list.at(0);
-                    response_line = response_line.trimmed();
-
-                    if(response_line == QString("HTTP/1.1 200 OK")){
-                        //Check if body exists before trying to extract the body
-                        if(blockchain_response_stringlist.size() >= 2){
-                            //HTTP body exists extract body from the message.
-                            http_body = blockchain_response_stringlist.at(1);
-
-                            //QString to QJsonDocument
-                            QJsonParseError jsondoc_error = QJsonParseError();
-                            QJsonDocument jsondoc = QJsonDocument::fromJson(http_body.toUtf8(), &jsondoc_error);
-
-                            //if no json conversion errors occured extract the "result" value
-                            if(jsondoc_error.error == QJsonParseError::NoError){
-                                output.clear();
-                                output.append(jsondoc.toJson(QJsonDocument::Compact));
-
-                                http_response_successful = true;
-                            }else{
-                                qDebug() << "json error";
-                            }
-                        }else{
-                            qDebug() << "body dosen't exist";
-                        }
-                    }else{
-                        qDebug() << "body";
-                    }
-                }
-            }
-        }
     }
 
     return output;

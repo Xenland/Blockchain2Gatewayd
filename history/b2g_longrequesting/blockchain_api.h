@@ -21,7 +21,6 @@ public:
     void blockchain_clear_for_new_request();
     void scroll_and_detect_deposits(QStringList);
     int get_highest_block_height(bool&);
-    QByteArray get_listsinceblock(QString, bool&);
     QByteArray get_hash_by_index(int, bool&);
     QByteArray get_txid_by_blockhash(QString, bool&);
     QByteArray get_rawtxinfo_by_txid(QString, bool&);
@@ -32,10 +31,8 @@ private:
     QStringList block_hash;
     QStringList block_tx_id;
     QStringList raw_txid_representation;
-    QJsonArray tx_list;
 
     QByteArray generate_http_head();
-    void debug_percentage_finish(int, int);
 
 signals:
 
