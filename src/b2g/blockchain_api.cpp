@@ -37,8 +37,8 @@ void blockchain_api::blockchain_clear_for_new_request(){
     }
 }
 
-void blockchain_api::scroll_and_detect_deposits(QStringList addresses){
-    while(1==1){
+void blockchain_api::scroll_and_detect_deposits(QMap<QString, QString> addresses){
+    while(1==1){//Note: remember not to leave this as 1==1 change to a boolean variable
         bool continue_process = false;
         int block_height = 0;
         while(continue_process == false){ //guarantee we have retrieved the block height

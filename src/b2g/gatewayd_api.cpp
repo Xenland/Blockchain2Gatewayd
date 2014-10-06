@@ -11,3 +11,4 @@ bool gatewayd_api::can_connect(){
     tcp_socket->connectToHost("127.0.0.1", 5990);
     return tcp_socket->waitForConnected(5000);
 }
+

@@ -11,4 +11,5 @@ sql::sql(QObject *parent) :
     db.setUserName("gatewayd_user");
     db.setPassword("mkr5UyTnbG");
     bool ok = db.open();
+    qDebug() << "DB: " << ok;
 }

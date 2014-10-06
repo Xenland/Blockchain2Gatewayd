@@ -10,6 +10,8 @@
 #include <QString>
 #include <QStringList>
 #include <QJsonParseError>
+#include <QMap>
+
 
 class blockchain_api : public QObject
 {
@@ -19,7 +21,7 @@ public:
 
     bool can_connect();
     void blockchain_clear_for_new_request();
-    void scroll_and_detect_deposits(QStringList);
+    void scroll_and_detect_deposits(QMap<QString, QString>);
     int get_highest_block_height(bool&);
     QByteArray get_listsinceblock(QString, bool&);
     QByteArray get_hash_by_index(int, bool&);
